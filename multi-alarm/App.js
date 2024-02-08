@@ -1,74 +1,223 @@
-import React, { useState, useEffect } from "react";
-import { Button, View, Alert, AppState } from "react-native";
-import { Audio } from "expo-av";
-import * as TaskManager from "expo-task-manager";
-
-const BACKGROUND_TASK_NAME = "background-alarm";
+import React, { useEffect, useState } from "react";
+import { Button, View, Text, StyleSheet, Modal, Pressable, FlatList, StatusBar } from "react-native";
+import DateTimePicker from "react-native-modal-datetime-picker";
+import { Picker } from "@react-native-picker/picker";
 
 const App = () => {
-    const [alarmSet, setAlarmSet] = useState(false);
+    const [alarms, setAlarms] = useState([]);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [startTime, setStartTime] = useState("");
+    const [endTime, setEndTime] = useState("");
 
-    useEffect(() => {
-        // Register background task to ensure audio playback continues
-        TaskManager.defineTask(BACKGROUND_TASK_NAME, ({ data, error }) => {
-            if (error) {
-                console.error("Background task error:", error);
-                return;
-            }
-
-            if (data) {
-                playAlarm();
-            }
-        });
-    }, []);
-
-    const playAlarm = async () => {
-        try {
-            const { sound } = await Audio.Sound.createAsync(require("./assets/alarm.mp3"));
-            await sound.playAsync();
-        } catch (error) {
-            console.error("Failed to load the sound", error);
-        }
-    };
-
-    const setAlarm = async () => {
-        // Play alarm sound
-        await playAlarm();
-        setAlarmSet(true);
-        Alert.alert("Alarm set!");
-    };
-
-    const handleAppStateChange = (nextAppState) => {
-        if (nextAppState === "background") {
-            // Schedule background task for audio playback
-            TaskManager.getRegisteredTasksAsync().then((tasks) => {
-                if (!tasks.find((task) => task.taskName === BACKGROUND_TASK_NAME)) {
-                    TaskManager.unregisterAllTasksAsync();
-                    TaskManager.defineTask(BACKGROUND_TASK_NAME, ({ data }) => {
-                        playAlarm();
-                        return TaskManager.TaskExecutionFinished;
-                    });
-                    TaskManager.scheduleTaskAsync(BACKGROUND_TASK_NAME, 0, {});
-                }
-            });
-        }
+    const addAlarm = () => {
+        setModalVisible(true);
     };
 
     useEffect(() => {
-        // Listen for app state changes
-        AppState.addEventListener("change", handleAppStateChange);
+        saveAlarm();
+    }, [endTime]);
 
-        return () => {
-            // Clean up event listener
-            AppState.removeEventListener("change", handleAppStateChange);
-        };
-    }, []);
+    useEffect(() => {
+        console.log(alarms);
+    }, [alarms]);
+
+    const saveAlarm = () => {
+        if (startTime !== "" && endTime !== "") {
+            setAlarms([...alarms, { start: startTime, end: endTime, interval: "3mins" }]);
+            setModalVisible(false);
+            setStartTime("");
+            setEndTime("");
+        }
+    };
+
+    const deleteAlarm = (index) => {
+        const updatedAlarms = [...alarms];
+        updatedAlarms.splice(index, 1);
+        setAlarms(updatedAlarms);
+    };
+
+    const handleStartTimeConfirm = (time) => {
+        setStartTime(time.toLocaleTimeString());
+    };
+
+    const handleEndTimeConfirm = (time) => {
+        setEndTime(time.toLocaleTimeString());
+    };
+
+    const handleCancel = () => {
+        setModalVisible(false);
+    };
+
+    const formatTime = (timeString) => {
+        const [timePart, meridiem] = timeString.split(/\s+/);
+        const [hour, minute] = timePart.split(":");
+
+        return `${hour}:${minute} ${meridiem}`;
+    };
 
     return (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            {!alarmSet ? <Button title="Set Alarm" onPress={setAlarm} /> : null}
+        <View style={styles.container}>
+            <StatusBar barStyle="light-content" backgroundColor="#232323" />
+            {alarms.length === 0 ? (
+                <View style={styles.noAlarmsContainer}>
+                    <Text style={styles.text}>No alarms set yet. Click to add a new one.</Text>
+                    <Pressable style={styles.button} onPress={addAlarm}>
+                        <Text style={styles.btnText}>Add alarm</Text>
+                    </Pressable>
+                </View>
+            ) : (
+                <FlatList
+                    ListHeaderComponent={
+                        <View
+                            style={{ justifyContent: "center", alignContent: "center", flex: 1, alignItems: "center" }}
+                        >
+                            <Pressable style={styles.button} onPress={addAlarm}>
+                                <Text style={styles.btnText}>Add alarm</Text>
+                            </Pressable>
+                        </View>
+                    }
+                    data={alarms}
+                    renderItem={({ item, index }) => (
+                        <>
+                            <View style={styles.alarmItem}>
+                                <View
+                                    style={{
+                                        flex: 1,
+                                        flexDirection: "column",
+                                        justifyContent: "center",
+                                        alignContent: "center",
+                                        alignItems: "center",
+                                        width: 200,
+                                    }}
+                                >
+                                    <Text style={styles.text}>Start</Text>
+                                    <Text style={styles.text}>{formatTime(item.start)}</Text>
+                                </View>
+                                <View
+                                    style={{
+                                        flex: 1,
+                                        flexDirection: "column",
+                                        justifyContent: "center",
+                                        alignContent: "center",
+                                        alignItems: "center",
+                                    }}
+                                >
+                                    <Text style={styles.text}>End</Text>
+                                    <Text style={styles.text}>{formatTime(item.end)}</Text>
+                                </View>
+                            </View>
+                            <View
+                                style={{
+                                    flex: 1,
+                                    flexDirection: "column",
+                                    justifyContent: "center",
+                                    alignContent: "center",
+                                    alignItems: "center",
+                                }}
+                            >
+                                <Text style={{ color: "#e5e1e1", fontSize: 24, textAlign: "center", marginTop: 20 }}>
+                                    Every
+                                </Text>
+
+                                <Picker
+                                    selectedValue={item.interval || "3mins"}
+                                    onValueChange={(interval) => {
+                                        const updatedAlarms = [...alarms];
+                                        updatedAlarms[index].interval = interval;
+                                        setAlarms(updatedAlarms);
+                                    }}
+                                    style={{
+                                        width: 140,
+                                        color: "#e5e1e1",
+                                        textAlign: "center",
+                                        marginLeft: 80,
+                                        marginBottom: 20,
+                                    }}
+                                    itemStyle={{ fontSize: 20 }}
+                                >
+                                    <Picker.Item label="1min" value="1min" />
+                                    <Picker.Item label="3mins" value="3mins" />
+                                    <Picker.Item label="5mins" value="5mins" />
+                                    <Picker.Item label="10mins" value="10mins" />
+                                    <Picker.Item label="15mins" value="15mins" />
+                                    <Picker.Item label="20mins" value="20mins" />
+                                    <Picker.Item label="30mins" value="30mins" />
+                                </Picker>
+                                <Pressable style={styles.buttonDelete} onPress={() => deleteAlarm(index)}>
+                                    <Text style={styles.btnText}>Delete</Text>
+                                </Pressable>
+                            </View>
+                        </>
+                    )}
+                    keyExtractor={(item, index) => index.toString()}
+                />
+            )}
+
+            <Modal animationType="slide" transparent={true} visible={modalVisible}>
+                <View>
+                    <DateTimePicker
+                        isVisible={modalVisible}
+                        mode="time"
+                        onConfirm={handleEndTimeConfirm}
+                        onCancel={handleCancel}
+                    />
+                    <DateTimePicker
+                        isVisible={modalVisible}
+                        mode="time"
+                        onConfirm={handleStartTimeConfirm}
+                        onCancel={handleCancel}
+                    />
+                </View>
+            </Modal>
         </View>
     );
 };
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#232323",
+    },
+    button: {
+        backgroundColor: "#e5e1e1",
+        textAlign: "center",
+        padding: 10,
+        paddingHorizontal: 15,
+        borderRadius: 15,
+        marginTop: 50,
+        marginBottom: 50,
+    },
+    buttonDelete: {
+        backgroundColor: "#FD6A6A",
+        textAlign: "center",
+        padding: 10,
+        paddingHorizontal: 15,
+        borderRadius: 15,
+        marginBottom: 70,
+    },
+    btnText: {
+        color: "#2b2b2b",
+        fontSize: 20,
+        fontWeight: "bold",
+    },
+    text: {
+        color: "#e5e1e1",
+        fontSize: 24,
+    },
+    noAlarmsContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    alarmItem: {
+        width: 300,
+        flex: 1,
+        flexDirection: "row",
+        gap: 10,
+        marginBottom: 10,
+    },
+});
 
 export default App;
