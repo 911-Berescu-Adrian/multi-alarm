@@ -1,23 +1,13 @@
 import React, { useEffect, useState } from "react";
-import {
-    Button,
-    View,
-    Text,
-    StyleSheet,
-    Modal,
-    Pressable,
-    FlatList,
-    StatusBar,
-    ToastAndroid,
-    Alert,
-} from "react-native";
+import { View, Text, Modal, Pressable, FlatList, StatusBar, ToastAndroid, Alert } from "react-native";
 import DateTimePicker from "react-native-modal-datetime-picker";
 import { Picker } from "@react-native-picker/picker";
 import { Audio } from "expo-av";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { styles } from "./styles";
+import { getAlarmTimeStamps, formatTime } from "./utils";
 
-const App = () => {
+const AlarmManager = () => {
     const [alarms, setAlarms] = useState([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [startTime, setStartTime] = useState("");
@@ -68,46 +58,6 @@ const App = () => {
             ToastAndroid.show("Error saving alarms", ToastAndroid.SHORT);
             console.error("Error saving alarms:", error);
         }
-    };
-
-    const parseTimeStringToDate = (timeString) => {
-        const [timePart, meridiem] = timeString.split(/\s+/);
-        const [hour, minute, second] = timePart.split(":").map(Number);
-
-        let adjustedHour = hour;
-        if (meridiem === "PM" && hour !== 12) {
-            adjustedHour += 12;
-        } else if (meridiem === "AM" && hour === 12) {
-            adjustedHour = 0;
-        }
-
-        const date = new Date();
-        date.setHours(adjustedHour);
-        date.setMinutes(minute);
-        date.setSeconds(second || 0);
-
-        return date;
-    };
-
-    const getAlarmTimeStamps = (alarm) => {
-        const startTime = parseTimeStringToDate(alarm.start);
-        const endTime = parseTimeStringToDate(alarm.end);
-        const interval = parseInt(alarm.interval);
-
-        if (startTime > endTime) {
-            endTime.setDate(endTime.getDate() + 1);
-        }
-
-        const timestamps = [];
-        let currentTime = new Date(startTime);
-
-        while (currentTime <= endTime) {
-            timestamps.push(currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-
-            currentTime.setMinutes(currentTime.getMinutes() + interval);
-        }
-
-        return timestamps;
     };
 
     const loadAlarmSound = async () => {
@@ -194,16 +144,8 @@ const App = () => {
         setModalVisible(false);
     };
 
-    const formatTime = (timeString) => {
-        const [timePart, meridiem] = timeString.split(/\s+/);
-        const [hour, minute] = timePart.split(":");
-
-        return `${hour}:${minute} ${meridiem}`;
-    };
-
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#232323" />
             {alarms.length === 0 ? (
                 <View style={styles.noAlarmsContainer}>
                     <Text style={styles.text}>No alarms set yet. Click to add a new one.</Text>
@@ -319,4 +261,4 @@ const App = () => {
     );
 };
 
-export default App;
+export default AlarmManager;
