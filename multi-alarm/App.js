@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Button, View, Text, StyleSheet, Modal, Pressable, FlatList, StatusBar } from "react-native";
 import DateTimePicker from "react-native-modal-datetime-picker";
 import { Picker } from "@react-native-picker/picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const App = () => {
     const [alarms, setAlarms] = useState([]);
@@ -14,12 +15,35 @@ const App = () => {
     };
 
     useEffect(() => {
+        loadAlarms();
+    }, []);
+
+    useEffect(() => {
         saveAlarm();
     }, [endTime]);
 
     useEffect(() => {
-        console.log(alarms);
+        storeAlarms();
     }, [alarms]);
+
+    const loadAlarms = async () => {
+        try {
+            const storedAlarms = await AsyncStorage.getItem("alarms");
+            if (storedAlarms !== null) {
+                setAlarms(JSON.parse(storedAlarms));
+            }
+        } catch (error) {
+            console.error("Error loading alarms:", error);
+        }
+    };
+
+    const storeAlarms = async () => {
+        try {
+            await AsyncStorage.setItem("alarms", JSON.stringify(alarms));
+        } catch (error) {
+            console.error("Error saving alarms:", error);
+        }
+    };
 
     const saveAlarm = () => {
         if (startTime !== "" && endTime !== "") {
