@@ -9,18 +9,17 @@ import { getAlarmTimeStamps, formatTime } from "./utils";
 import * as TaskManager from "expo-task-manager";
 import * as BackgroundFetch from "expo-background-fetch";
 
+//stop not working
+
 const TASK_NAME = "BACKGROUND_TASK";
 
-TaskManager.defineTask(TASK_NAME, async () => {
-    try {
-        console.log("Running background task");
-        const storedAlarms = await AsyncStorage.getItem("alarms");
-        const alarms = storedAlarms !== null ? JSON.parse(storedAlarms) : [];
-        const alarmTriggered = checkAndTriggerAlarm(alarms);
-        return alarmTriggered ? BackgroundFetch.Result.NewData : BackgroundFetch.Result.NoData;
-    } catch (err) {
-        return BackgroundFetch.Result.Failed;
-    }
+TaskManager.defineTask(TASK_NAME, () => {
+    console.log("haladit cu stil", "time: ", new Date().toLocaleTimeString());
+    const storedAlarms = AsyncStorage.getItem("alarms");
+    console.log("Alarms from background task", storedAlarms);
+    // Call checkAndTriggerAlarm with the loaded alarms
+    checkAndTriggerAlarm(alarms);
+    return BackgroundFetch.Result.NewData;
 });
 
 const AlarmManager = () => {
@@ -39,9 +38,11 @@ const AlarmManager = () => {
         const sound = new Audio.Sound();
         setAlarmSound(sound);
         loadAlarms();
-
+        registerBackgroundFetch();
         return () => {
             sound.unloadAsync();
+            BackgroundFetch.unregisterTaskAsync(TASK_NAME);
+            console.log("Unregistered background task");
         };
     }, []);
 
@@ -57,21 +58,6 @@ const AlarmManager = () => {
 
     useEffect(() => {
         storeAlarms();
-        console.log("alarms", alarms);
-        if (alarms.length === 0) {
-            BackgroundFetch.unregisterTaskAsync(TASK_NAME);
-        } else {
-            (async () => {
-                const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
-                if (!isRegistered) {
-                    await BackgroundFetch.registerTaskAsync(TASK_NAME, {
-                        minimumInterval: 20, // the minimum time to wait between fetches in seconds
-                        stopOnTerminate: false, // android only, stop the task from running if the app is killed
-                        startOnBoot: true, // android only, start the task again after the device has rebooted
-                    });
-                }
-            })();
-        }
     }, [alarms]);
 
     const loadAlarms = async () => {
@@ -108,6 +94,19 @@ const AlarmManager = () => {
         } catch (error) {
             ToastAndroid.show("Failed to load the alarm sound", ToastAndroid.SHORT);
             console.error("Failed to load the alarm sound", error);
+        }
+    };
+
+    const registerBackgroundFetch = async () => {
+        try {
+            await BackgroundFetch.registerTaskAsync(TASK_NAME, {
+                minimumInterval: 60, // the minimum time to wait between fetches in seconds
+                stopOnTerminate: false, // android only, stop the task from running if the app is killed
+                startOnBoot: true, // android only, start the task again after the device has rebooted
+            });
+            console.log("Task registered");
+        } catch (err) {
+            console.log("Task Register failed:", err);
         }
     };
 
