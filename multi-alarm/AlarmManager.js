@@ -6,6 +6,22 @@ import { Audio } from "expo-av";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { styles } from "./styles";
 import { getAlarmTimeStamps, formatTime } from "./utils";
+import * as TaskManager from "expo-task-manager";
+import * as BackgroundFetch from "expo-background-fetch";
+
+const TASK_NAME = "BACKGROUND_TASK";
+
+TaskManager.defineTask(TASK_NAME, async () => {
+    try {
+        console.log("Running background task");
+        const storedAlarms = await AsyncStorage.getItem("alarms");
+        const alarms = storedAlarms !== null ? JSON.parse(storedAlarms) : [];
+        const alarmTriggered = checkAndTriggerAlarm(alarms);
+        return alarmTriggered ? BackgroundFetch.Result.NewData : BackgroundFetch.Result.NoData;
+    } catch (err) {
+        return BackgroundFetch.Result.Failed;
+    }
+});
 
 const AlarmManager = () => {
     const [alarms, setAlarms] = useState([]);
@@ -16,9 +32,6 @@ const AlarmManager = () => {
     const [alarmSound, setAlarmSound] = useState(null);
 
     const addAlarm = async () => {
-        Vibration.vibrate([1000, 1000], true);
-        Vibration.cancel();
-        triggerAlarm();
         setModalVisible(true);
     };
 
@@ -26,11 +39,8 @@ const AlarmManager = () => {
         const sound = new Audio.Sound();
         setAlarmSound(sound);
         loadAlarms();
-        const interval = setInterval(() => {
-            checkAndTriggerAlarm();
-        }, 1000 * 60);
+
         return () => {
-            clearInterval(interval);
             sound.unloadAsync();
         };
     }, []);
@@ -48,6 +58,20 @@ const AlarmManager = () => {
     useEffect(() => {
         storeAlarms();
         console.log("alarms", alarms);
+        if (alarms.length === 0) {
+            BackgroundFetch.unregisterTaskAsync(TASK_NAME);
+        } else {
+            (async () => {
+                const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
+                if (!isRegistered) {
+                    await BackgroundFetch.registerTaskAsync(TASK_NAME, {
+                        minimumInterval: 20, // the minimum time to wait between fetches in seconds
+                        stopOnTerminate: false, // android only, stop the task from running if the app is killed
+                        startOnBoot: true, // android only, start the task again after the device has rebooted
+                    });
+                }
+            })();
+        }
     }, [alarms]);
 
     const loadAlarms = async () => {
@@ -75,6 +99,11 @@ const AlarmManager = () => {
         try {
             await alarmSound.loadAsync(require("./assets/alarm.mp3"));
             await alarmSound.setVolumeAsync(1);
+            await Audio.setAudioModeAsync({
+                staysActiveInBackground: true,
+                playsInSilentModeIOS: true,
+                interruptionModeAndroid: 1,
+            });
             console.log("Alarm sound loaded");
         } catch (error) {
             ToastAndroid.show("Failed to load the alarm sound", ToastAndroid.SHORT);
@@ -106,23 +135,26 @@ const AlarmManager = () => {
         }
     };
 
-    const checkAndTriggerAlarm = () => {
+    const checkAndTriggerAlarm = (alarms) => {
         const currentHour = new Date().getHours();
         const currentMinute = new Date().getMinutes();
         const meridian = currentHour >= 12 ? "PM" : "AM";
 
+        console.log("HELLO FROM BACKGROUND TASK");
+
         const currentHour12 = currentHour === 0 ? 12 : currentHour > 12 ? currentHour - 12 : currentHour;
         const currentMinute12 = currentMinute < 10 ? `0${currentMinute}` : currentMinute;
         const currentTime = `${currentHour12}:${currentMinute12}\u202F${meridian}`;
+        let alarmTriggered = false;
         alarms.forEach((alarm) => {
             const timestamps = getAlarmTimeStamps(alarm);
-            console.log("timestamps", timestamps);
-            console.log("currentTime", currentTime);
             if (timestamps.includes(currentTime)) {
                 console.log("Alarm triggered");
                 triggerAlarm();
+                alarmTriggered = true;
             }
         });
+        return alarmTriggered;
     };
 
     const saveAlarm = () => {
