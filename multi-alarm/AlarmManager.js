@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Modal, Pressable, FlatList, StatusBar, ToastAndroid, Alert } from "react-native";
+import { View, Text, Modal, Pressable, FlatList, StatusBar, ToastAndroid, Alert, Vibration } from "react-native";
 import DateTimePicker from "react-native-modal-datetime-picker";
 import { Picker } from "@react-native-picker/picker";
 import { Audio } from "expo-av";
@@ -12,31 +12,42 @@ const AlarmManager = () => {
     const [modalVisible, setModalVisible] = useState(false);
     const [startTime, setStartTime] = useState("");
     const [endTime, setEndTime] = useState("");
-
-    const alarmSound = new Audio.Sound();
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [alarmSound, setAlarmSound] = useState(null);
 
     const addAlarm = async () => {
+        Vibration.vibrate([1000, 1000], true);
+        Vibration.cancel();
+        triggerAlarm();
         setModalVisible(true);
     };
 
     useEffect(() => {
+        const sound = new Audio.Sound();
+        setAlarmSound(sound);
         loadAlarms();
-        loadAlarmSound();
         const interval = setInterval(() => {
             checkAndTriggerAlarm();
-        }, 1000 * 10);
-        return () => clearInterval(interval);
+        }, 1000 * 60);
+        return () => {
+            clearInterval(interval);
+            sound.unloadAsync();
+        };
     }, []);
+
+    useEffect(() => {
+        if (alarmSound) {
+            loadAlarmSound();
+        }
+    }, [alarmSound]);
 
     useEffect(() => {
         saveAlarm();
     }, [endTime]);
 
     useEffect(() => {
-        alarms.forEach((alarm) => {
-            getAlarmTimeStamps(alarm);
-        });
         storeAlarms();
+        console.log("alarms", alarms);
     }, [alarms]);
 
     const loadAlarms = async () => {
@@ -63,6 +74,7 @@ const AlarmManager = () => {
     const loadAlarmSound = async () => {
         try {
             await alarmSound.loadAsync(require("./assets/alarm.mp3"));
+            await alarmSound.setVolumeAsync(1);
             console.log("Alarm sound loaded");
         } catch (error) {
             ToastAndroid.show("Failed to load the alarm sound", ToastAndroid.SHORT);
@@ -71,11 +83,26 @@ const AlarmManager = () => {
     };
 
     const triggerAlarm = async () => {
-        try {
-            await alarmSound.playAsync();
-        } catch (error) {
-            ToastAndroid.show("Failed to play the alarm sound", ToastAndroid.SHORT);
-            console.error("Failed to play the alarm sound", error);
+        if (alarmSound) {
+            try {
+                setIsPlaying(true);
+                for (let i = 0; i < 4; i++) {
+                    Vibration.vibrate([1000, 1000], true);
+                    await alarmSound.playAsync();
+                    let status = await alarmSound.getStatusAsync();
+                    while (status.isPlaying) {
+                        await new Promise((resolve) => setTimeout(resolve, 1000));
+                        status = await alarmSound.getStatusAsync();
+                    }
+                    await alarmSound.stopAsync();
+                }
+            } catch (error) {
+                ToastAndroid.show("Failed to play the alarm sound", ToastAndroid.SHORT);
+                console.error("Failed to play the alarm sound", error);
+            } finally {
+                setIsPlaying(false);
+                Vibration.cancel();
+            }
         }
     };
 
@@ -84,12 +111,9 @@ const AlarmManager = () => {
         const currentMinute = new Date().getMinutes();
         const meridian = currentHour >= 12 ? "PM" : "AM";
 
-        const currentHour12 = currentHour > 12 ? currentHour - 12 : currentHour;
+        const currentHour12 = currentHour === 0 ? 12 : currentHour > 12 ? currentHour - 12 : currentHour;
         const currentMinute12 = currentMinute < 10 ? `0${currentMinute}` : currentMinute;
         const currentTime = `${currentHour12}:${currentMinute12}\u202F${meridian}`;
-
-        console.log("test");
-        console.log(alarms);
         alarms.forEach((alarm) => {
             const timestamps = getAlarmTimeStamps(alarm);
             console.log("timestamps", timestamps);
@@ -132,6 +156,23 @@ const AlarmManager = () => {
         );
     };
 
+    const handleStop = async () => {
+        if (alarmSound) {
+            try {
+                const status = await alarmSound.getStatusAsync();
+                if (status.isLoaded) {
+                    await alarmSound.pauseAsync();
+                    console.log("Alarm sound stopped");
+                } else {
+                    console.log("Cannot stop sound because it is not loaded");
+                }
+            } catch (error) {
+                ToastAndroid.show("Failed to stop the alarm sound", ToastAndroid.SHORT);
+                console.error("Failed to stop the alarm sound", error);
+            }
+        }
+    };
+
     const handleStartTimeConfirm = (time) => {
         setStartTime(time.toLocaleTimeString());
     };
@@ -157,11 +198,23 @@ const AlarmManager = () => {
                 <FlatList
                     ListHeaderComponent={
                         <View
-                            style={{ justifyContent: "center", alignContent: "center", flex: 1, alignItems: "center" }}
+                            style={{
+                                justifyContent: "center",
+                                alignContent: "center",
+                                flex: 1,
+                                gap: 40,
+                                alignItems: "center",
+                                flexDirection: "row",
+                            }}
                         >
                             <Pressable style={styles.button} onPress={addAlarm}>
                                 <Text style={styles.btnText}>Add alarm</Text>
                             </Pressable>
+                            {isPlaying && (
+                                <Pressable style={styles.stopButton} onPress={handleStop}>
+                                    <Text style={styles.btnText}>Stop</Text>
+                                </Pressable>
+                            )}
                         </View>
                     }
                     data={alarms}

@@ -16,6 +16,15 @@ export const styles = StyleSheet.create({
         marginTop: 50,
         marginBottom: 50,
     },
+    stopButton: {
+        backgroundColor: "#FD6A6A",
+        textAlign: "center",
+        padding: 10,
+        paddingHorizontal: 15,
+        borderRadius: 15,
+        marginTop: 50,
+        marginBottom: 50,
+    },
     buttonDelete: {
         backgroundColor: "#FD6A6A",
         textAlign: "center",
